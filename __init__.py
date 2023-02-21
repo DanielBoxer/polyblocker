@@ -14,15 +14,15 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import bpy
-from .ui import POLYBLOCKER_MT_pie
-from .ops import POLYBLOCKER_OT_add_mesh
+from .ui import POLYBLOCKER_MT_pie, POLYBLOCKER_AP_preferences
+from .ops import POLYBLOCKER_OT_add_mesh, POLYBLOCKER_OT_make_collection
 
 bl_info = {
     "name": "PolyBlocker",
     "author": "Daniel Boxer",
     "description": "Enhanced add mesh menu for quick blockouts",
     "blender": (2, 80, 0),
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "location": "View3D > Ctrl Shift A",
     "category": "Mesh",
 }
@@ -31,7 +31,9 @@ bl_info = {
 keymaps = []
 classes = (
     POLYBLOCKER_OT_add_mesh,
+    POLYBLOCKER_OT_make_collection,
     POLYBLOCKER_MT_pie,
+    POLYBLOCKER_AP_preferences,
 )
 
 

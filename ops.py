@@ -5,6 +5,25 @@ import bmesh
 from mathutils import Vector, Matrix
 
 
+added = {}
+collections = {}
+
+
+def move_to_collection(obj, target):
+    for collection in obj.users_collection:
+        collection.objects.unlink(obj)
+    target.objects.link(obj)
+    obj.name = target.name
+
+
+def check_exists(reference):
+    try:
+        reference.name
+        return True
+    except ReferenceError:
+        return False
+
+
 class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
     bl_idname = "polyblocker.add_mesh"
     bl_label = "Add Mesh"
@@ -27,6 +46,7 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
         return context.object is not None and context.object.mode == "EDIT"
 
     def execute(self, context):
+        prefs = context.preferences.addons[__package__].preferences
         obj = context.object
 
         # clear old properties
@@ -49,16 +69,27 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
             # apply transform
             obj.data.transform(obj.matrix_basis)
             obj.matrix_basis.identity()
+
+            # make sure all edit meshes are selected
+            obj.select_set(True)
+
         bpy.ops.object.mode_set(mode="EDIT")
 
         # get selected geometry
         s_verts = []
         s_edges = []
         s_faces = []
+        target_obj = None
+        max_verts = 0
         for mesh in meshes:
             bm = bmesh.from_edit_mesh(mesh["obj"].data)
             mesh["bm"] = bm
-            s_verts.extend([v for v in bm.verts if v.select])
+            verts = [v for v in bm.verts if v.select]
+            if prefs.auto_coll and len(verts) > max_verts:
+                # target mesh has the most selected verts
+                max_verts = len(verts)
+                target_obj = mesh["obj"]
+            s_verts.extend(verts)
             s_edges.extend([e for e in bm.edges if e.select])
 
             for f in bm.faces:
@@ -184,7 +215,7 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
             )
 
         # scale param sometimes doesn't work, so set it here
-        added_obj = bpy.context.active_object
+        added_obj = context.active_object
         added_obj.scale = self.scale
 
         for m in meshes:
@@ -196,6 +227,24 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode="EDIT")
 
+        if prefs.auto_coll:
+            if target_obj not in added:
+                added[target_obj] = []
+            added[target_obj].append(added_obj)
+         
+            if len(added[target_obj]) == prefs.obj_number:
+                bpy.ops.polyblocker.make_collection(
+                    "INVOKE_DEFAULT", target_name=target_obj.name
+                )
+            elif len(added[target_obj]) > prefs.obj_number:
+                # obj is not in dict if make collection was cancelled
+                if target_obj in collections:
+                    if check_exists(collections[target_obj]):
+                        move_to_collection(added_obj, collections[target_obj])
+                    else:
+                        del collections[target_obj]
+                        del added[target_obj]
+
         return {"FINISHED"}
 
     def draw(self, context):
@@ -205,11 +254,9 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
         col = row.column()
         col.label(text="Location")
         col.prop(self, "location", text="")
-
         col = row.column()
         col.label(text="Rotation")
         col.prop(self, "rotation", text="")
-
         col = row.column()
         col.label(text="Scale")
         col.prop(self, "scale", text="")
@@ -217,3 +264,28 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
         row = layout.row()
         row.scale_y = 1.25
         row.operator("wm.operator_defaults", text="Reset All")
+
+
+class POLYBLOCKER_OT_make_collection(bpy.types.Operator):
+    bl_idname = "polyblocker.make_collection"
+    bl_label = "Make Collection"
+    bl_description = "Make collection"
+    bl_options = {"UNDO"}
+
+    coll_name: bpy.props.StringProperty(name="Name")
+    target_name: bpy.props.StringProperty()
+
+    def execute(self, context):
+        target_obj = bpy.data.objects[self.target_name]
+        new_coll = bpy.data.collections.new(self.coll_name)
+        collections[target_obj] = new_coll
+        target_obj.users_collection[0].children.link(new_coll)
+        for obj in added[target_obj]:
+            move_to_collection(obj, new_coll)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        self.layout.prop(self, "coll_name")

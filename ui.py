@@ -58,3 +58,21 @@ class POLYBLOCKER_MT_pie(bpy.types.Menu):
             draw_mesh_op("Cylinder", *args)
             draw_mesh_op("Cone", *args)
             draw_mesh_op("Torus", *args, major_radius=size / 2, minor_radius=size / 4)
+
+
+class POLYBLOCKER_AP_preferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+
+    auto_coll: bpy.props.BoolProperty(
+        name="Auto Collection",
+        description="Automatically add meshes to new collections",
+    )
+    obj_number: bpy.props.IntProperty(
+        name="Number", description="", min=1, max=10, default=3
+    )
+
+    def draw(self, context):
+        row = self.layout.row()
+        row.prop(self, "auto_coll")
+        if self.auto_coll:
+            row.prop(self, "obj_number")
