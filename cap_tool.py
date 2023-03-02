@@ -37,6 +37,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     self.origin_faces.append(f)
                 normal_sum += f.normal
                 f.select = False
+                f.hide = True
+                for e in f.edges:
+                    e.hide = True
+        self.bm.faces.active = None
 
         if len(self.origin_faces) == 0:
             self.report({"ERROR"}, "No faces selected")
@@ -59,6 +63,11 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     if e.other_vert(g) in start_verts:
                         segment_edge = e
                         break
+            elif isinstance(g, bmesh.types.BMFace):
+                g.hide = False
+                for e in g.edges:
+                    e.hide = False
+                g.select = True
 
         self.loops = []
         self.init_loop_co = []
@@ -116,6 +125,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             del self.loops[0]
             del self.init_loop_co[0]
             self.loop_count -= 1
+            # select first loop
+            for f in self.bm.faces:
+                if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
+                    f.select = True
             self.update(context, event)
         elif event.type == "LEFTMOUSE":
             self.finish(context)
@@ -185,6 +198,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         # find new loop
         new = []
         for f in cut_faces["faces"]:
+            f.select = True
             for v in f.verts:
                 if v not in old_verts:
                     new.append(v)
@@ -219,6 +233,9 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
             self.bm.faces.active = self.origin_faces[0]
             for f in self.origin_faces:
+                f.hide = False
+                for e in f.edges:
+                    e.hide = False
                 f.select = True
         else:
             # delete original faces

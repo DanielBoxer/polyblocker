@@ -23,7 +23,7 @@ bl_info = {
     "author": "Daniel Boxer",
     "description": "Enhanced add mesh menu for quick blockouts",
     "blender": (2, 80, 0),
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "location": "View3D > Ctrl Shift A",
     "category": "Mesh",
 }
@@ -49,6 +49,11 @@ def register():
             "wm.call_menu_pie", type="A", value="PRESS", shift=True, ctrl=True
         )
         keymap_item.properties.name = "POLYBLOCKER_MT_pie"
+        keymaps.append((keymap, keymap_item))
+
+        keymap_item = keymap.keymap_items.new(
+            "polyblocker.cap_tool", type="C", value="PRESS", shift=True, ctrl=True
+        )
         keymaps.append((keymap, keymap_item))
 
 
