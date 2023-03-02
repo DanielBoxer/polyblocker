@@ -16,14 +16,6 @@ def move_to_collection(obj, target):
     obj.name = target.name
 
 
-def check_exists(reference):
-    try:
-        reference.name
-        return True
-    except ReferenceError:
-        return False
-
-
 class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
     bl_idname = "polyblocker.add_mesh"
     bl_label = "Add Mesh"
@@ -231,7 +223,7 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
             if target_obj not in added:
                 added[target_obj] = []
             added[target_obj].append(added_obj)
-         
+
             if len(added[target_obj]) == prefs.obj_number:
                 bpy.ops.polyblocker.make_collection(
                     "INVOKE_DEFAULT", target_name=target_obj.name
@@ -239,9 +231,10 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
             elif len(added[target_obj]) > prefs.obj_number:
                 # obj is not in dict if make collection was cancelled
                 if target_obj in collections:
-                    if check_exists(collections[target_obj]):
+                    try:
+                        collections[target_obj].name
                         move_to_collection(added_obj, collections[target_obj])
-                    else:
+                    except ReferenceError:
                         del collections[target_obj]
                         del added[target_obj]
 
