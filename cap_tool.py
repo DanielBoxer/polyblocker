@@ -13,6 +13,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
 
     loop_count: bpy.props.IntProperty(default=5)
     scale_fac: bpy.props.FloatProperty(default=0.15)
+    invert: bpy.props.BoolProperty()
 
     @classmethod
     def poll(cls, context):
@@ -93,7 +94,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         context.window.cursor_set("SCROLL_XY")
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
-            "     Scroll: Add/Remove Loops"
+            "     Scroll: Add/Remove Loops     A/D: Change Scale     I: Invert"
         )
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -130,6 +131,15 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
                     f.select = True
             self.update(context, event)
+        elif event.type == "A" and self.scale_fac > 0.02:
+            self.scale_fac -= 0.01
+            self.update(context, event)
+        elif event.type == "D":
+            self.scale_fac += 0.01
+            self.update(context, event)
+        elif event.type == "I" and event.value == "PRESS":
+            self.invert = not self.invert
+            self.update(context, event)
         elif event.type == "LEFTMOUSE":
             self.finish(context)
             return {"FINISHED"}
@@ -145,13 +155,15 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         ratio = distance_px / ((context.region.width + context.region.height) / 2)
         # get approximate distance relative to viewport
         distance_m = ratio * context.area.spaces.active.region_3d.view_distance
+        if self.invert:
+            distance_m *= -1
         # get translate vector
         displacement = self.avg_normal * distance_m
 
         def falloff(segment_idx, max_val):
             return (
                 max_val
-                * (self.scale_fac ** ((segment_idx + 1) / (self.loop_count + 1)) - 1)
+                * (self.scale_fac ** ((segment_idx + 1) / (self.loop_count + 2)) - 1)
                 / (self.scale_fac - 1)
             )
 
@@ -175,8 +187,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         bmesh.ops.triangulate(self.bm)
         bmesh.update_edit_mesh(context.object.data)
 
+        invert_text = "ON" if self.invert else "OFF"
         context.area.header_text_set(
-            f"D: {distance_m:.5f} m     Segments: {self.loop_count}"
+            f"D: {abs(distance_m):.5f} m     Segments: {self.loop_count}"
+            f"     Scale: {self.scale_fac:.2f}     Invert: {invert_text}"
         )
 
     def add_segment(self, segment_edge, old_verts, append_seg=True):
