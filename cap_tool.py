@@ -25,24 +25,41 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         self.init_mouse_pos = Vector((event.mouse_region_x, event.mouse_region_y))
         self.bm = bmesh.from_edit_mesh(context.object.data)
 
+        connected_groups = []
+        # get selected faces and find connected
+        for f in self.bm.faces:
+            if f.select:
+                found_groups = []
+                for group in connected_groups:
+                    # faces are connected if they share 2 or more verts
+                    if len(set(f.verts).intersection(group["verts"])) >= 2:
+                        found_groups.append(group)
+
+                # merge all found groups
+                merged_group = {"faces": [f], "verts": set(f.verts)}
+                for group in found_groups:
+                    merged_group["faces"].extend(group["faces"])
+                    merged_group["verts"].update(group["verts"])
+                    connected_groups.remove(group)
+                connected_groups.append(merged_group)
+
         start_verts = set()
         normal_sum = Vector()
         self.origin_faces = []
         active_face = self.bm.faces.active
-        # get selected faces
-        for f in self.bm.faces:
-            if f.select:
-                start_verts.update(list(f.verts))
-                if f == active_face:
-                    # active face is stored at start of list
-                    self.origin_faces.insert(0, f)
-                else:
-                    self.origin_faces.append(f)
-                normal_sum += f.normal
-                f.select = False
-                f.hide = True
-                for e in f.edges:
-                    e.hide = True
+        largest_group = max(connected_groups, key=lambda group: len(group["faces"]))
+        for f in largest_group["faces"]:
+            start_verts.update(list(f.verts))
+            if f == active_face:
+                # active face is stored at start of list
+                self.origin_faces.insert(0, f)
+            else:
+                self.origin_faces.append(f)
+            normal_sum += f.normal
+            f.select = False
+            f.hide = True
+            for e in f.edges:
+                e.hide = True
         self.bm.faces.active = None
 
         if len(self.origin_faces) == 0:
@@ -84,7 +101,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         context.window.cursor_set("SCROLL_XY")
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
-            "     Scroll: Add/Remove Loops     A/D: Change Scale     I: Invert"
+            "     Scroll: Add/Remove Segments     A/D: Change Scale     I: Invert"
             "     V: Variable Length"
         )
         context.window_manager.modal_handler_add(self)
