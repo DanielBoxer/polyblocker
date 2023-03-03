@@ -3,6 +3,7 @@
 import bpy
 import bmesh
 from mathutils import Vector
+from . import line_draw
 
 
 class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
@@ -131,10 +132,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
                     f.select = True
             self.update(context, event)
-        elif event.type == "A" and self.scale_fac > 0.02:
+        elif event.type == "A" and event.value == "PRESS" and self.scale_fac > 0.02:
             self.scale_fac -= 0.01
             self.update(context, event)
-        elif event.type == "D":
+        elif event.type == "D" and event.value == "PRESS":
             self.scale_fac += 0.01
             self.update(context, event)
         elif event.type == "I" and event.value == "PRESS":
@@ -192,6 +193,8 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             f"D: {abs(distance_m):.5f} m     Segments: {self.loop_count}"
             f"     Scale: {self.scale_fac:.2f}     Invert: {invert_text}"
         )
+        line_draw.remove()
+        line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
 
     def add_segment(self, segment_edge, old_verts, append_seg=True):
         def walk(edge):
@@ -257,3 +260,4 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         bmesh.update_edit_mesh(context.object.data)
         context.area.header_text_set(None)
         context.workspace.status_text_set(None)
+        line_draw.remove()
