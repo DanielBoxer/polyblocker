@@ -12,9 +12,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
     bl_description = "Cap"
     bl_options = {"UNDO", "GRAB_CURSOR", "BLOCKING"}
 
-    loop_count: bpy.props.IntProperty(default=5)
-    scale_fac: bpy.props.FloatProperty(default=0.15)
-    invert: bpy.props.BoolProperty()
+    loop_count: bpy.props.IntProperty(name="Segments", default=5)
+    scale_fac: bpy.props.FloatProperty(name="Scale", default=0.15)
+    invert: bpy.props.BoolProperty(name="Invert")
+    vary_len: bpy.props.BoolProperty(name="Variable Length")
 
     @classmethod
     def poll(cls, context):
@@ -53,18 +54,11 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         # extrude and store new geometry
         new_verts = []
         new_verts_co = []
-        segment_edge = None
         for g in bmesh.ops.extrude_face_region(self.bm, geom=self.origin_faces)["geom"]:
             if isinstance(g, bmesh.types.BMVert):
                 new_verts.append(g)
                 # need to make vector copy
                 new_verts_co.append(g.co.copy())
-
-                # find edge for loop cuts
-                for e in g.link_edges:
-                    if e.other_vert(g) in start_verts:
-                        segment_edge = e
-                        break
             elif isinstance(g, bmesh.types.BMFace):
                 g.hide = False
                 for e in g.edges:
@@ -74,17 +68,12 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         self.loops = []
         self.init_loop_co = []
         old_verts = set(self.bm.verts)
+        segment_edge = self.get_segment_edge(new_verts[0], start_verts)
         for _ in range(self.loop_count):
             self.add_segment(segment_edge, old_verts)
 
-        # see if order is correct
-        found = False
-        for e in self.loops[-1][0].link_edges:
-            if e.other_vert(self.loops[-1][0]) in start_verts:
-                found = True
-                break
         # fix order
-        if found:
+        if self.get_segment_edge(self.loops[0][0], start_verts) is None:
             self.loops.reverse()
             self.init_loop_co.reverse()
 
@@ -96,6 +85,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
             "     Scroll: Add/Remove Loops     A/D: Change Scale     I: Invert"
+            "     V: Variable Length"
         )
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -104,25 +94,14 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         if event.type == "MOUSEMOVE":
             self.update(context, event)
         elif event.type == "WHEELUPMOUSE" and self.loop_count < 500:
-            segment_edge = None
             start_verts = set(v for f in self.origin_faces for v in f.verts)
-            for v in self.loops[0]:
-                for e in v.link_edges:
-                    if e.other_vert(v) in start_verts:
-                        segment_edge = e
-                        break
-            self.add_segment(segment_edge, set(self.bm.verts), append_seg=False)
+            segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
+            self.add_segment(segment_edge, set(self.bm.verts), init=False)
             self.update(context, event)
         elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 1:
-            bmesh.ops.dissolve_edges(
-                self.bm,
-                edges=[
-                    e
-                    for e in self.bm.edges
-                    if e.verts[0] in set(self.loops[0])
-                    and e.verts[1] in set(self.loops[0])
-                ],
-            )
+            lv = set(self.loops[0])
+            edges = [e for e in self.bm.edges if e.verts[0] in lv and e.verts[1] in lv]
+            bmesh.ops.dissolve_edges(self.bm, edges=edges)
             bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
             del self.loops[0]
             del self.init_loop_co[0]
@@ -140,6 +119,9 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             self.update(context, event)
         elif event.type == "I" and event.value == "PRESS":
             self.invert = not self.invert
+            self.update(context, event)
+        elif event.type == "V" and event.value == "PRESS":
+            self.vary_len = not self.vary_len
             self.update(context, event)
         elif event.type == "LEFTMOUSE":
             self.finish(context)
@@ -189,14 +171,16 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         bmesh.update_edit_mesh(context.object.data)
 
         invert_text = "ON" if self.invert else "OFF"
+        vary_len_text = "ON" if self.vary_len else "OFF"
         context.area.header_text_set(
             f"D: {abs(distance_m):.5f} m     Segments: {self.loop_count}"
             f"     Scale: {self.scale_fac:.2f}     Invert: {invert_text}"
+            f"     Variable Length: {vary_len_text}"
         )
         line_draw.remove()
         line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
 
-    def add_segment(self, segment_edge, old_verts, append_seg=True):
+    def add_segment(self, segment_edge, old_verts, init=True):
         def walk(edge):
             yield edge
             edge.tag = True
@@ -205,6 +189,11 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 if not (len(loop.face.verts) != 4 or loop.edge.tag):
                     yield from walk(loop.edge)
 
+        # reset loops so initial pos is correct for new loop
+        if not init and not self.vary_len:
+            for loop_idx, loop in enumerate(self.loops):
+                for v_idx, v in enumerate(loop):
+                    v.co = self.init_loop_co[loop_idx][v_idx]
         for e in self.bm.edges:
             e.tag = False
         # do cuts one at a time to keep order
@@ -221,27 +210,20 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     new.append(v)
                     # keep track of new vertices
                     old_verts.add(v)
-        if append_seg:
+        if init:
             # segment is added in invoke
             self.loops.append(new)
             self.init_loop_co.append([v.co.copy() for v in new])
         else:
             # segment is added during modal
             self.loops.insert(0, new)
-            # the new loop will start with some displacement
-            # so use values of other loop but keep new sign
-            no_disp_co = [
-                Vector(
-                    (
-                        abs(c2.x) if c1.x >= 0 else -abs(c2.x),
-                        abs(c2.y) if c1.y >= 0 else -abs(c2.y),
-                        abs(c2.z) if c1.z >= 0 else -abs(c2.z),
-                    )
-                )
-                for c1, c2 in zip([v.co.copy() for v in new], self.init_loop_co[0])
-            ]
-            self.init_loop_co.insert(0, no_disp_co)
+            self.init_loop_co.insert(0, [v.co.copy() for v in new])
             self.loop_count += 1
+
+    def get_segment_edge(self, vert, start_verts):
+        for e in vert.link_edges:
+            if e.other_vert(vert) in start_verts:
+                return e
 
     def finish(self, context, revert=False):
         if revert:
