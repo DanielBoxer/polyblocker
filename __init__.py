@@ -15,7 +15,7 @@
 
 import bpy
 from .ui import POLYBLOCKER_MT_pie, POLYBLOCKER_AP_preferences
-from .ops import POLYBLOCKER_OT_add_mesh, POLYBLOCKER_OT_make_collection
+from .add_mesh import POLYBLOCKER_OT_add_mesh, POLYBLOCKER_OT_make_collection
 from .cap_tool import POLYBLOCKER_OT_cap_tool
 
 bl_info = {
