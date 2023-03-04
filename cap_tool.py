@@ -15,7 +15,8 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
     loop_count: bpy.props.IntProperty(name="Segments", default=5)
     scale_fac: bpy.props.FloatProperty(name="Scale", default=0.15)
     invert: bpy.props.BoolProperty(name="Invert")
-    vary_len: bpy.props.BoolProperty(name="Variable Length")
+    control_len: bpy.props.BoolProperty(name="Control Length")
+    flip_scale: bpy.props.BoolProperty(name="Flip Scale")
 
     @classmethod
     def poll(cls, context):
@@ -36,9 +37,9 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                         found_groups.append(group)
 
                 # merge all found groups
-                merged_group = {"faces": [f], "verts": set(f.verts)}
+                merged_group = {"faces": set([f]), "verts": set(f.verts)}
                 for group in found_groups:
-                    merged_group["faces"].extend(group["faces"])
+                    merged_group["faces"].update(group["faces"])
                     merged_group["verts"].update(group["verts"])
                     connected_groups.remove(group)
                 connected_groups.append(merged_group)
@@ -101,16 +102,17 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         if self.get_segment_edge(self.loops[0][0], start_verts) is None:
             self.loops.reverse()
             self.init_loop_co.reverse()
-
         # add initial faces as last loop
         self.loops.append(new_verts)
         self.init_loop_co.append(new_verts_co)
 
+        self.segment_input = ""
         context.window.cursor_set("SCROLL_XY")
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
-            "     Scroll: Add/Remove Segments     A/D: Change Scale     I: Invert"
-            "     V: Variable Length     R: Reset"
+            "     Scroll: Add/Remove Segments     Numpad: Set Segments"
+            "     A/D: Change Scale     F: Flip Scale     C: Control Length"
+            "     I: Invert     R: Reset"
         )
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -119,10 +121,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         try:
             if event.type == "MOUSEMOVE":
                 self.update(context, event)
-            elif event.type == "WHEELUPMOUSE" and self.loop_count < 500:
+            elif event.type == "WHEELUPMOUSE" and self.loop_count < 250:
                 self.add_segment()
                 self.update(context, event)
-            elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 1:
+            elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 0:
                 self.del_segment()
                 self.update(context, event)
             elif event.type == "A" and event.value == "PRESS" and self.scale_fac > 0.02:
@@ -134,16 +136,31 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             elif event.type == "I" and event.value == "PRESS":
                 self.invert = not self.invert
                 self.update(context, event)
-            elif event.type == "V" and event.value == "PRESS":
-                self.vary_len = not self.vary_len
+            elif event.type == "C" and event.value == "PRESS":
+                self.control_len = not self.control_len
+                self.update(context, event)
+            elif event.type == "F" and event.value == "PRESS":
+                self.flip_scale = not self.flip_scale
                 self.update(context, event)
             elif event.type == "R" and event.value == "PRESS":
-                op = self.add_segment if 5 - self.loop_count > 0 else self.del_segment
-                for _ in range(abs(5 - self.loop_count)):
-                    op()
+                self.set_segments(5)
                 self.scale_fac = 0.15
                 self.invert = False
-                self.vary_len = False
+                self.control_len = False
+                self.flip_scale = False
+                self.segment_input = ""
+                self.update(context, event)
+            elif event.type.startswith("NUMPAD_") and event.value == "PRESS":
+                val = event.type[7:]
+                if val.isdigit() and 0 <= int(self.segment_input + val) <= 250:
+                    if len(self.segment_input) < 3:
+                        self.segment_input += val
+                elif val == "ENTER":
+                    self.set_segments(int(self.segment_input))
+                    self.segment_input = ""
+                self.update(context, event)
+            elif event.type == "BACK_SPACE" and event.value == "PRESS":
+                self.segment_input = self.segment_input[:-1]
                 self.update(context, event)
             elif event.type == "LEFTMOUSE":
                 self.finish(context)
@@ -177,30 +194,33 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
 
         for loop_idx, loop in enumerate(self.loops):
             v_sum = Vector()
-            falloff_dist = falloff(loop_idx, displacement)
+            falloff_disp = falloff(loop_idx, displacement)
+            # move loop
             for v_idx, v in enumerate(loop):
-                # move loop
-                new_co = self.init_loop_co[loop_idx][v_idx] + falloff_dist
+                new_co = self.init_loop_co[loop_idx][v_idx] + falloff_disp
                 v.co = new_co
                 v_sum += new_co
 
             center = v_sum / len(loop)
+            # scale loop
+            falloff_scale = falloff(self.loop_count - loop_idx, 1)
+            if self.flip_scale:
+                falloff_scale = 1 / falloff_scale
             for v_idx, v in enumerate(loop):
-                # scale loop
-                v.co = center + (v.co - center) * falloff(
-                    self.loop_count - loop_idx, 1  # reverse falloff
-                )
+                v.co = center + (v.co - center) * falloff_scale
 
         # calling this with no args fixes dark faces bug?
         bmesh.ops.triangulate(self.bm)
         bmesh.update_edit_mesh(context.object.data)
 
-        invert_text = "ON" if self.invert else "OFF"
-        vary_len_text = "ON" if self.vary_len else "OFF"
+        count_txt = f"[{self.segment_input}]" if self.segment_input else self.loop_count
+        invert_txt = "ON" if self.invert else "OFF"
+        control_len_txt = "ON" if self.control_len else "OFF"
+        flip_scale_txt = "ON" if self.flip_scale else "OFF"
         context.area.header_text_set(
-            f"D: {abs(distance_m):.5f} m     Segments: {self.loop_count}"
-            f"     Scale: {self.scale_fac:.2f}     Invert: {invert_text}"
-            f"     Variable Length: {vary_len_text}"
+            f"D: {abs(distance_m):.5f} m     Segments: {count_txt}"
+            f"     Scale: {self.scale_fac:.2f}     Flip Scale: {flip_scale_txt}"
+            f"     Control Length: {control_len_txt}     Invert: {invert_txt}"
         )
         line_draw.remove()
         line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
@@ -215,7 +235,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     yield from walk(loop.edge)
 
         # reset loops so initial pos is correct for new loop
-        if not init and not self.vary_len:
+        if not init and not self.control_len:
             for loop_idx, loop in enumerate(self.loops):
                 for v_idx, v in enumerate(loop):
                     v.co = self.init_loop_co[loop_idx][v_idx]
@@ -267,6 +287,11 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         for e in vert.link_edges:
             if e.other_vert(vert) in start_verts:
                 return e
+
+    def set_segments(self, n):
+        op = self.add_segment if n - self.loop_count > 0 else self.del_segment
+        for _ in range(abs(n - self.loop_count)):
+            op()
 
     def finish(self, context, revert=False):
         try:

@@ -21,10 +21,10 @@ from .cap_tool import POLYBLOCKER_OT_cap_tool
 bl_info = {
     "name": "PolyBlocker",
     "author": "Daniel Boxer",
-    "description": "Enhanced add mesh menu for quick blockouts",
+    "description": "Enhanced add mesh menu and cap tool",
     "blender": (2, 80, 0),
-    "version": (1, 2, 0),
-    "location": "View3D > Ctrl Shift A",
+    "version": (1, 1, 0),
+    "location": "View3D > Ctrl Shift A/C",
     "category": "Mesh",
 }
 
