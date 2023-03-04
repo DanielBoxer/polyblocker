@@ -90,7 +90,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         segment_edge = self.get_segment_edge(new_verts[0], start_verts)
         for _ in range(self.loop_count):
             try:
-                self.add_segment(segment_edge, old_verts)
+                self.segment(segment_edge, old_verts)
             except AttributeError:
                 self.report({"ERROR"}, "Too many faces selected")
                 bmesh.ops.delete(self.bm, geom=new_verts)
@@ -110,7 +110,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
             "     Scroll: Add/Remove Segments     A/D: Change Scale     I: Invert"
-            "     V: Variable Length"
+            "     V: Variable Length     R: Reset"
         )
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -120,22 +120,10 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             if event.type == "MOUSEMOVE":
                 self.update(context, event)
             elif event.type == "WHEELUPMOUSE" and self.loop_count < 500:
-                start_verts = set(v for f in self.origin_faces for v in f.verts)
-                segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
-                self.add_segment(segment_edge, set(self.bm.verts), init=False)
+                self.add_segment()
                 self.update(context, event)
             elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 1:
-                l = set(self.loops[0])
-                old = [e for e in self.bm.edges if e.verts[0] in l and e.verts[1] in l]
-                bmesh.ops.dissolve_edges(self.bm, edges=old)
-                bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
-                del self.loops[0]
-                del self.init_loop_co[0]
-                self.loop_count -= 1
-                # select first loop
-                for f in self.bm.faces:
-                    if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
-                        f.select = True
+                self.del_segment()
                 self.update(context, event)
             elif event.type == "A" and event.value == "PRESS" and self.scale_fac > 0.02:
                 self.scale_fac -= 0.01
@@ -149,12 +137,20 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             elif event.type == "V" and event.value == "PRESS":
                 self.vary_len = not self.vary_len
                 self.update(context, event)
+            elif event.type == "R" and event.value == "PRESS":
+                op = self.add_segment if 5 - self.loop_count > 0 else self.del_segment
+                for _ in range(abs(5 - self.loop_count)):
+                    op()
+                self.scale_fac = 0.15
+                self.invert = False
+                self.vary_len = False
+                self.update(context, event)
             elif event.type == "LEFTMOUSE":
                 self.finish(context)
                 return {"FINISHED"}
             elif event.type in {"RIGHTMOUSE", "ESC"}:
                 self.finish(context, revert=True)
-                # return {"CANCELLED"}
+                return {"CANCELLED"}
         except Exception as e:
             self.report({"ERROR"}, f"Error: {str(e)}")
             self.finish(context, revert=True)
@@ -209,7 +205,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         line_draw.remove()
         line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
 
-    def add_segment(self, segment_edge, old_verts, init=True):
+    def segment(self, segment_edge, old_verts, init=True):
         def walk(edge):
             yield edge
             edge.tag = True
@@ -248,6 +244,24 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             self.loops.insert(0, new)
             self.init_loop_co.insert(0, [v.co.copy() for v in new])
             self.loop_count += 1
+
+    def add_segment(self):
+        start_verts = set(v for f in self.origin_faces for v in f.verts)
+        segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
+        self.segment(segment_edge, set(self.bm.verts), init=False)
+
+    def del_segment(self):
+        lv = set(self.loops[0])
+        old = [e for e in self.bm.edges if e.verts[0] in lv and e.verts[1] in lv]
+        bmesh.ops.dissolve_edges(self.bm, edges=old)
+        bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
+        del self.loops[0]
+        del self.init_loop_co[0]
+        self.loop_count -= 1
+        # select first loop
+        for f in self.bm.faces:
+            if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
+                f.select = True
 
     def get_segment_edge(self, vert, start_verts):
         for e in vert.link_edges:
