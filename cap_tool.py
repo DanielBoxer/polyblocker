@@ -43,6 +43,13 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     connected_groups.remove(group)
                 connected_groups.append(merged_group)
 
+        if len(connected_groups) == 0:
+            self.report({"ERROR"}, "No faces selected")
+            return {"CANCELLED"}
+        elif len(connected_groups[0]["faces"]) == len(self.bm.faces):
+            self.report({"ERROR"}, "Too many faces selected")
+            return {"CANCELLED"}
+
         start_verts = set()
         normal_sum = Vector()
         self.origin_faces = []
@@ -61,11 +68,6 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             for e in f.edges:
                 e.hide = True
         self.bm.faces.active = None
-
-        if len(self.origin_faces) == 0:
-            self.report({"ERROR"}, "No faces selected")
-            return {"CANCELLED"}
-
         self.avg_normal = normal_sum / len(self.origin_faces)
 
         # extrude and store new geometry
@@ -87,7 +89,13 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         old_verts = set(self.bm.verts)
         segment_edge = self.get_segment_edge(new_verts[0], start_verts)
         for _ in range(self.loop_count):
-            self.add_segment(segment_edge, old_verts)
+            try:
+                self.add_segment(segment_edge, old_verts)
+            except AttributeError:
+                self.report({"ERROR"}, "Too many faces selected")
+                bmesh.ops.delete(self.bm, geom=new_verts)
+                self.finish(context, revert=True)
+                return {"CANCELLED"}
 
         # fix order
         if self.get_segment_edge(self.loops[0][0], start_verts) is None:
@@ -108,45 +116,49 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
-        if event.type == "MOUSEMOVE":
-            self.update(context, event)
-        elif event.type == "WHEELUPMOUSE" and self.loop_count < 500:
-            start_verts = set(v for f in self.origin_faces for v in f.verts)
-            segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
-            self.add_segment(segment_edge, set(self.bm.verts), init=False)
-            self.update(context, event)
-        elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 1:
-            lv = set(self.loops[0])
-            edges = [e for e in self.bm.edges if e.verts[0] in lv and e.verts[1] in lv]
-            bmesh.ops.dissolve_edges(self.bm, edges=edges)
-            bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
-            del self.loops[0]
-            del self.init_loop_co[0]
-            self.loop_count -= 1
-            # select first loop
-            for f in self.bm.faces:
-                if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
-                    f.select = True
-            self.update(context, event)
-        elif event.type == "A" and event.value == "PRESS" and self.scale_fac > 0.02:
-            self.scale_fac -= 0.01
-            self.update(context, event)
-        elif event.type == "D" and event.value == "PRESS":
-            self.scale_fac += 0.01
-            self.update(context, event)
-        elif event.type == "I" and event.value == "PRESS":
-            self.invert = not self.invert
-            self.update(context, event)
-        elif event.type == "V" and event.value == "PRESS":
-            self.vary_len = not self.vary_len
-            self.update(context, event)
-        elif event.type == "LEFTMOUSE":
-            self.finish(context)
-            return {"FINISHED"}
-        elif event.type in {"RIGHTMOUSE", "ESC"}:
+        try:
+            if event.type == "MOUSEMOVE":
+                self.update(context, event)
+            elif event.type == "WHEELUPMOUSE" and self.loop_count < 500:
+                start_verts = set(v for f in self.origin_faces for v in f.verts)
+                segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
+                self.add_segment(segment_edge, set(self.bm.verts), init=False)
+                self.update(context, event)
+            elif event.type == "WHEELDOWNMOUSE" and self.loop_count > 1:
+                l = set(self.loops[0])
+                old = [e for e in self.bm.edges if e.verts[0] in l and e.verts[1] in l]
+                bmesh.ops.dissolve_edges(self.bm, edges=old)
+                bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
+                del self.loops[0]
+                del self.init_loop_co[0]
+                self.loop_count -= 1
+                # select first loop
+                for f in self.bm.faces:
+                    if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
+                        f.select = True
+                self.update(context, event)
+            elif event.type == "A" and event.value == "PRESS" and self.scale_fac > 0.02:
+                self.scale_fac -= 0.01
+                self.update(context, event)
+            elif event.type == "D" and event.value == "PRESS":
+                self.scale_fac += 0.01
+                self.update(context, event)
+            elif event.type == "I" and event.value == "PRESS":
+                self.invert = not self.invert
+                self.update(context, event)
+            elif event.type == "V" and event.value == "PRESS":
+                self.vary_len = not self.vary_len
+                self.update(context, event)
+            elif event.type == "LEFTMOUSE":
+                self.finish(context)
+                return {"FINISHED"}
+            elif event.type in {"RIGHTMOUSE", "ESC"}:
+                self.finish(context, revert=True)
+                # return {"CANCELLED"}
+        except Exception as e:
+            self.report({"ERROR"}, f"Error: {str(e)}")
             self.finish(context, revert=True)
             return {"CANCELLED"}
-
         return {"RUNNING_MODAL"}
 
     def update(self, context, event):
@@ -243,20 +255,23 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 return e
 
     def finish(self, context, revert=False):
-        if revert:
-            # delete new geometry
-            bmesh.ops.delete(self.bm, geom=[v for loop in self.loops for v in loop])
-            bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
-            self.bm.faces.active = self.origin_faces[0]
-            for f in self.origin_faces:
-                f.hide = False
-                for e in f.edges:
-                    e.hide = False
-                f.select = True
-        else:
-            # delete original faces
-            bmesh.ops.delete(self.bm, geom=self.origin_faces, context="FACES")
-        bmesh.update_edit_mesh(context.object.data)
-        context.area.header_text_set(None)
-        context.workspace.status_text_set(None)
-        line_draw.remove()
+        try:
+            if revert:
+                # delete new geometry
+                bmesh.ops.delete(self.bm, geom=[v for loop in self.loops for v in loop])
+                bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
+                self.bm.faces.active = self.origin_faces[0]
+                for f in self.origin_faces:
+                    f.hide = False
+                    for e in f.edges:
+                        e.hide = False
+                    f.select = True
+            else:
+                # delete original faces
+                bmesh.ops.delete(self.bm, geom=self.origin_faces, context="FACES")
+            bmesh.update_edit_mesh(context.object.data)
+            context.area.header_text_set(None)
+            context.workspace.status_text_set(None)
+            line_draw.remove()
+        except Exception as e:
+            self.report({"ERROR"}, f"Error cleaning up: {str(e)}")
