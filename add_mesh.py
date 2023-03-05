@@ -35,7 +35,8 @@ class POLYBLOCKER_OT_add_mesh(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None and context.object.mode == "EDIT"
+        obj = context.object
+        return obj is not None and obj.mode == "EDIT" and obj.type == "MESH"
 
     def execute(self, context):
         prefs = context.preferences.addons[__package__].preferences

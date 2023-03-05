@@ -20,16 +20,20 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None and context.object.mode == "EDIT"
+        obj = context.object
+        return obj is not None and obj.mode == "EDIT" and obj.type == "MESH"
 
     def invoke(self, context, event):
         self.init_mouse_pos = Vector((event.mouse_region_x, event.mouse_region_y))
         self.bm = bmesh.from_edit_mesh(context.object.data)
 
+        active_face = None
         connected_groups = []
         # get selected faces and find connected
         for f in self.bm.faces:
             if f.select:
+                if f == self.bm.faces.active:
+                    active_face = f
                 found_groups = []
                 for group in connected_groups:
                     # faces are connected if they share 2 or more verts
@@ -47,28 +51,27 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         if len(connected_groups) == 0:
             self.report({"ERROR"}, "No faces selected")
             return {"CANCELLED"}
-        elif len(connected_groups[0]["faces"]) == len(self.bm.faces):
-            self.report({"ERROR"}, "Too many faces selected")
-            return {"CANCELLED"}
 
         start_verts = set()
         normal_sum = Vector()
         self.origin_faces = []
-        active_face = self.bm.faces.active
         largest_group = max(connected_groups, key=lambda group: len(group["faces"]))
-        for f in largest_group["faces"]:
+        # deselect other groups
+        for group in connected_groups:
+            if group != largest_group:
+                for f in group["faces"]:
+                    f.select = False
+        largest_group = set(largest_group["faces"])
+        for f in largest_group:
             start_verts.update(list(f.verts))
-            if f == active_face:
-                # active face is stored at start of list
-                self.origin_faces.insert(0, f)
-            else:
-                self.origin_faces.append(f)
+            self.origin_faces.append(f)
             normal_sum += f.normal
             f.select = False
             f.hide = True
             for e in f.edges:
-                e.hide = True
-        self.bm.faces.active = None
+                # check if boundary
+                if len(set(e.link_faces).intersection(largest_group)) > 1:
+                    e.hide = True
         self.avg_normal = normal_sum / len(self.origin_faces)
 
         # extrude and store new geometry
@@ -79,11 +82,12 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 new_verts.append(g)
                 # need to make vector copy
                 new_verts_co.append(g.co.copy())
+            elif isinstance(g, bmesh.types.BMEdge):
+                g.hide = False
             elif isinstance(g, bmesh.types.BMFace):
                 g.hide = False
-                for e in g.edges:
-                    e.hide = False
                 g.select = True
+        self.bm.faces.active = active_face
 
         self.loops = []
         self.init_loop_co = []
@@ -99,12 +103,15 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 return {"CANCELLED"}
 
         # fix order
-        if self.get_segment_edge(self.loops[0][0], start_verts) is None:
-            self.loops.reverse()
-            self.init_loop_co.reverse()
+        if len(self.loops) > 0:
+            if self.get_segment_edge(self.loops[0][0], start_verts) is None:
+                self.loops.reverse()
+                self.init_loop_co.reverse()
         # add initial faces as last loop
         self.loops.append(new_verts)
         self.init_loop_co.append(new_verts_co)
+        if len(self.loops) == 1:
+            self.select_first()
 
         self.segment_input = ""
         context.window.cursor_set("SCROLL_XY")
@@ -167,7 +174,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                 return {"FINISHED"}
             elif event.type in {"RIGHTMOUSE", "ESC"}:
                 self.finish(context, revert=True)
-                return {"CANCELLED"}
+                return {"FINISHED"}
         except Exception as e:
             self.report({"ERROR"}, f"Error: {str(e)}")
             self.finish(context, revert=True)
@@ -225,7 +232,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         line_draw.remove()
         line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
 
-    def segment(self, segment_edge, old_verts, init=True):
+    def segment(self, segment_edge, old_verts):
         def walk(edge):
             yield edge
             edge.tag = True
@@ -235,7 +242,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     yield from walk(loop.edge)
 
         # reset loops so initial pos is correct for new loop
-        if not init and not self.control_len:
+        if not self.control_len:
             for loop_idx, loop in enumerate(self.loops):
                 for v_idx, v in enumerate(loop):
                     v.co = self.init_loop_co[loop_idx][v_idx]
@@ -255,20 +262,18 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     new.append(v)
                     # keep track of new vertices
                     old_verts.add(v)
-        if init:
-            # segment is added in invoke
-            self.loops.append(new)
-            self.init_loop_co.append([v.co.copy() for v in new])
-        else:
-            # segment is added during modal
-            self.loops.insert(0, new)
-            self.init_loop_co.insert(0, [v.co.copy() for v in new])
-            self.loop_count += 1
+
+        self.loops.append(new)
+        self.init_loop_co.append([v.co.copy() for v in new])
 
     def add_segment(self):
         start_verts = set(v for f in self.origin_faces for v in f.verts)
         segment_edge = self.get_segment_edge(self.loops[0][0], start_verts)
-        self.segment(segment_edge, set(self.bm.verts), init=False)
+        self.segment(segment_edge, set(self.bm.verts))
+        # move new loop to the bottom
+        self.loops.insert(0, self.loops.pop())
+        self.init_loop_co.insert(0, self.init_loop_co.pop())
+        self.loop_count += 1
 
     def del_segment(self):
         lv = set(self.loops[0])
@@ -277,11 +282,8 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         bmesh.ops.dissolve_verts(self.bm, verts=self.loops[0])
         del self.loops[0]
         del self.init_loop_co[0]
+        self.select_first()
         self.loop_count -= 1
-        # select first loop
-        for f in self.bm.faces:
-            if len(set(f.verts).difference(set(self.loops[0]))) != len(f.verts):
-                f.select = True
 
     def get_segment_edge(self, vert, start_verts):
         for e in vert.link_edges:
@@ -293,18 +295,23 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
         for _ in range(abs(n - self.loop_count)):
             op()
 
+    def select_first(self):
+        for v in self.loops[0]:
+            for f in v.link_faces:
+                if len(set(f.verts).intersection(set(self.loops[0]))) > 0:
+                    f.select = True
+
     def finish(self, context, revert=False):
         try:
             if revert:
                 # delete new geometry
                 bmesh.ops.delete(self.bm, geom=[v for loop in self.loops for v in loop])
                 bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
-                self.bm.faces.active = self.origin_faces[0]
                 for f in self.origin_faces:
                     f.hide = False
+                    f.select = True
                     for e in f.edges:
                         e.hide = False
-                    f.select = True
             else:
                 # delete original faces
                 bmesh.ops.delete(self.bm, geom=self.origin_faces, context="FACES")
