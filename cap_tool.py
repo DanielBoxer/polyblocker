@@ -114,7 +114,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             self.select_first()
 
         self.segment_input = ""
-        context.window.cursor_set("SCROLL_XY")
+        context.window.cursor_modal_set("SCROLL_XY")
         context.workspace.status_text_set(
             "Left Click: Confirm     Right Click/Esc: Cancel"
             "     Scroll: Add/Remove Segments     Numpad: Set Segments"
@@ -318,6 +318,7 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             bmesh.update_edit_mesh(context.object.data)
             context.area.header_text_set(None)
             context.workspace.status_text_set(None)
+            context.window.cursor_modal_restore()
             line_draw.remove()
         except Exception as e:
             self.report({"ERROR"}, f"Error cleaning up: {str(e)}")
