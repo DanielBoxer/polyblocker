@@ -4,7 +4,9 @@
 
 Easily add mesh primitives using a pie menu. Just select some geometry, and you can add a mesh with the correct location, rotation and scale.
 
-![Add Mesh Menu](https://user-images.githubusercontent.com/65575771/218004789-6bd9a394-9456-47fe-85de-1134a7dd159f.gif)
+|  Edit Mode  | Object Mode |
+| :---------: | :---------: |
+![Add Mesh Edit Mode](https://user-images.githubusercontent.com/65575771/223024210-490445f6-d6c4-461d-9b88-088aee9a9e5d.gif) | ![Add Mesh Object Mode](https://user-images.githubusercontent.com/65575771/223023275-13091df1-40ca-4f33-871c-6f7594d580d5.gif)
 
 ## Cap Tool
 
