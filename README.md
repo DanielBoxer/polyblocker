@@ -15,3 +15,11 @@ Create adjustable rounded extrusions like caps, funnels and more. This operator 
 |       |       |
 | :---: | :---: |
 ![Cap Tool Cylinder](https://user-images.githubusercontent.com/65575771/222982674-776e7259-6a4a-44b4-8b08-32a29e906650.gif) | ![Cap Tool Cube](https://user-images.githubusercontent.com/65575771/222984647-14f0136a-71b3-4445-966d-f4931c9179bc.gif)
+
+## Quick Mirror
+
+Quickly add a mirror modifier using intuitive controls. Preview the modifier by hovering over an axis and drag your mouse to select axes. Quick Mirror will automatically select the mirror object or add an empty for mirroring on the origin.
+
+| Target | Origin |
+| :----: | :----: |
+![Quick Mirror Target](https://user-images.githubusercontent.com/65575771/225791968-c61f492f-043d-4aff-831c-4f5b682b10a7.gif) | ![Quick Mirror Origin](https://user-images.githubusercontent.com/65575771/225790320-a624133d-b938-4aab-9765-986e39faf01e.gif)
