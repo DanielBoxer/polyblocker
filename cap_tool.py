@@ -229,8 +229,9 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
             f"     Scale: {self.scale_fac:.2f}     Flip Scale: {flip_scale_txt}"
             f"     Control Length: {control_len_txt}     Invert: {invert_txt}"
         )
-        line_draw.remove()
-        line_draw.add((tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1))
+        line_draw.draw_guide(
+            (tuple(self.init_mouse_pos), tuple(current_pos)), (0, 0, 0, 1)
+        )
 
     def segment(self, segment_edge, old_verts):
         def walk(edge):
@@ -302,23 +303,20 @@ class POLYBLOCKER_OT_cap_tool(bpy.types.Operator):
                     f.select = True
 
     def finish(self, context, revert=False):
-        try:
-            if revert:
-                # delete new geometry
-                bmesh.ops.delete(self.bm, geom=[v for loop in self.loops for v in loop])
-                bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
-                for f in self.origin_faces:
-                    f.hide = False
-                    f.select = True
-                    for e in f.edges:
-                        e.hide = False
-            else:
-                # delete original faces
-                bmesh.ops.delete(self.bm, geom=self.origin_faces, context="FACES")
-            bmesh.update_edit_mesh(context.object.data)
-            context.area.header_text_set(None)
-            context.workspace.status_text_set(None)
-            context.window.cursor_modal_restore()
-            line_draw.remove()
-        except Exception as e:
-            self.report({"ERROR"}, f"Error cleaning up: {str(e)}")
+        if revert:
+            # delete new geometry
+            bmesh.ops.delete(self.bm, geom=[v for loop in self.loops for v in loop])
+            bmesh.ops.recalc_face_normals(self.bm, faces=self.origin_faces)
+            for f in self.origin_faces:
+                f.hide = False
+                f.select = True
+                for e in f.edges:
+                    e.hide = False
+        else:
+            # delete original faces
+            bmesh.ops.delete(self.bm, geom=self.origin_faces, context="FACES")
+        bmesh.update_edit_mesh(context.object.data)
+        context.area.header_text_set(None)
+        context.workspace.status_text_set(None)
+        context.window.cursor_modal_restore()
+        line_draw.remove("guide")

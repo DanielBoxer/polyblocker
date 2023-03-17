@@ -63,6 +63,7 @@ class POLYBLOCKER_MT_pie(bpy.types.Menu):
 class POLYBLOCKER_AP_preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    # add mesh menu
     auto_coll: bpy.props.BoolProperty(
         name="Auto Collection",
         description="Automatically add meshes to new collections",
@@ -70,9 +71,21 @@ class POLYBLOCKER_AP_preferences(bpy.types.AddonPreferences):
     obj_number: bpy.props.IntProperty(
         name="Number", description="", min=1, max=10, default=3
     )
+    # quick mirror
+    origin_method: bpy.props.EnumProperty(
+        items=[("EMPTY", "Empty", ""), ("ORIGIN", "Set Origin", "")]
+    )
 
     def draw(self, context):
-        row = self.layout.row()
+        layout = self.layout
+        box = layout.box()
+        box.label(text="Add Mesh Menu")
+        row = box.row()
         row.prop(self, "auto_coll")
         if self.auto_coll:
             row.prop(self, "obj_number")
+        box = layout.box()
+        box.label(text="Quick Mirror")
+        row = box.row()
+        row.label(text="Origin Method")
+        row.prop(self, "origin_method", expand=True)

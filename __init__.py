@@ -17,14 +17,15 @@ import bpy
 from .ui import POLYBLOCKER_MT_pie, POLYBLOCKER_AP_preferences
 from .add_mesh import POLYBLOCKER_OT_add_mesh, POLYBLOCKER_OT_make_collection
 from .cap_tool import POLYBLOCKER_OT_cap_tool
+from .quick_mirror import POLYBLOCKER_OT_quick_mirror
 
 bl_info = {
     "name": "PolyBlocker",
     "author": "Daniel Boxer",
-    "description": "Enhanced add mesh menu and cap tool",
+    "description": "Enhanced add mesh menu, cap tool, and quick mirror",
     "blender": (2, 80, 0),
-    "version": (1, 1, 0),
-    "location": "View3D > Ctrl Shift A/C",
+    "version": (1, 2, 0),
+    "location": "View3D > Ctrl Shift A/C, Alt M",
     "category": "Mesh",
 }
 
@@ -34,6 +35,7 @@ classes = (
     POLYBLOCKER_OT_add_mesh,
     POLYBLOCKER_OT_make_collection,
     POLYBLOCKER_OT_cap_tool,
+    POLYBLOCKER_OT_quick_mirror,
     POLYBLOCKER_MT_pie,
     POLYBLOCKER_AP_preferences,
 )
@@ -53,6 +55,11 @@ def register():
 
         keymap_item = keymap.keymap_items.new(
             "polyblocker.cap_tool", type="C", value="PRESS", shift=True, ctrl=True
+        )
+        keymaps.append((keymap, keymap_item))
+
+        keymap_item = keymap.keymap_items.new(
+            "polyblocker.quick_mirror", type="M", value="PRESS", alt=True
         )
         keymaps.append((keymap, keymap_item))
 
