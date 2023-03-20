@@ -18,13 +18,15 @@ from .ui import POLYBLOCKER_MT_pie, POLYBLOCKER_AP_preferences
 from .add_mesh import POLYBLOCKER_OT_add_mesh, POLYBLOCKER_OT_make_collection
 from .cap_tool import POLYBLOCKER_OT_cap_tool
 from .quick_mirror import POLYBLOCKER_OT_quick_mirror
+from .bump import POLYBLOCKER_OT_bump, POLYBLOCKER_OT_random_bumps
+
 
 bl_info = {
     "name": "PolyBlocker",
     "author": "Daniel Boxer",
-    "description": "Enhanced add mesh menu, cap tool, and quick mirror",
+    "description": "Enhanced add mesh menu, cap tool, quick mirror, and more",
     "blender": (2, 80, 0),
-    "version": (1, 2, 0),
+    "version": (1, 3, 0),
     "location": "View3D > Ctrl Shift A/C, Alt M",
     "category": "Mesh",
 }
@@ -36,6 +38,8 @@ classes = (
     POLYBLOCKER_OT_make_collection,
     POLYBLOCKER_OT_cap_tool,
     POLYBLOCKER_OT_quick_mirror,
+    POLYBLOCKER_OT_bump,
+    POLYBLOCKER_OT_random_bumps,
     POLYBLOCKER_MT_pie,
     POLYBLOCKER_AP_preferences,
 )
