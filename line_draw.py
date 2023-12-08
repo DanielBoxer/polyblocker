@@ -4,9 +4,10 @@ import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 
-
-SHADER_2D = gpu.shader.from_builtin("2D_UNIFORM_COLOR")
-SHADER_3D = gpu.shader.from_builtin("3D_UNIFORM_COLOR")
+SHADER_2D_NAME = "UNIFORM_COLOR" if bpy.app.version >= (4, 0, 0) else "2D_UNIFORM_COLOR"
+SHADER_3D_NAME = "UNIFORM_COLOR" if bpy.app.version >= (4, 0, 0) else "3D_UNIFORM_COLOR"
+SHADER_2D = gpu.shader.from_builtin(SHADER_2D_NAME)
+SHADER_3D = gpu.shader.from_builtin(SHADER_3D_NAME)
 COLOURS = {"X": (1, 0, 0, 1), "Y": (0, 1, 0, 1), "Z": (0, 0, 1, 1)}
 handles = {}
 batches = {}

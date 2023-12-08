@@ -26,7 +26,7 @@ bl_info = {
     "author": "Daniel Boxer",
     "description": "Enhanced add mesh menu, cap tool, quick mirror, and more",
     "blender": (2, 80, 0),
-    "version": (1, 3, 0),
+    "version": (1, 3, 1),
     "location": "View3D > Ctrl Shift A/C, Alt M",
     "category": "Mesh",
 }
